@@ -139,5 +139,3 @@ and [Google Play](https://play.google.com/store/apps/details?id=app.organicmaps)
 - Follow our updates in [Facebook](https://facebook.com/OrganicMaps), [Twitter](https://twitter.com/OrganicMapsApp),
 [Instagram](https://instagram.com/organicmaps.app/).
   - Güncellemelerimizi [Instagram](https://instagram.com/organicmapstr/) üzerinden takip edin.
-
-The Organic Maps community abides by the CNCF code of conduct.
