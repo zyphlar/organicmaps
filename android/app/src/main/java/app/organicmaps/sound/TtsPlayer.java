@@ -215,7 +215,7 @@ public enum TtsPlayer implements Initializable<Context>
     if (MediaPlayerWrapper.from(context).isPlaying())
       return;
     // It's necessary to call Framework.nativeGenerateTurnNotifications() even if TtsPlayer is invalid.
-    final String[] turnNotifications = Framework.nativeGenerateNotifications();
+    final String[] turnNotifications = Framework.nativeGenerateNotifications(shouldAnnounceStreetNames());
 
     if (turnNotifications != null && isReady())
       for (String textToSpeak : turnNotifications)
@@ -255,6 +255,16 @@ public enum TtsPlayer implements Initializable<Context>
   {
     Config.setTtsEnabled(enabled);
     nativeEnableTurnNotifications(enabled);
+  }
+
+  public static boolean shouldAnnounceStreetNames()
+  {
+    return Config.getAnnounceStreetNames();
+  }
+
+  public static void setAnnounceStreetNames(boolean enabled)
+  {
+    Config.setAnnounceStreetNames(enabled);
   }
 
   private boolean getUsableLanguages(List<LanguageData> outList)

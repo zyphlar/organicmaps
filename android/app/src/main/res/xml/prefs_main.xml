@@ -131,25 +131,32 @@
         android:title="@string/pref_tts_enable_title"
         app:singleLineTitle="false"
         android:order="1"/>
+      <SwitchPreferenceCompat
+          android:key="@string/pref_tts_street_names"
+          android:title="@string/pref_tts_street_names_title"
+          app:singleLineTitle="false"
+          android:summary="@string/pref_tts_street_names_description"
+          android:defaultValue="false"
+          android:order="2"/>
       <ListPreference
         android:key="@string/pref_tts_language"
         android:title="@string/pref_tts_language_title"
         app:singleLineTitle="false"
-        android:order="2"/>
+        android:order="3"/>
       <Preference
         android:key="@string/pref_tts_info"
         android:selectable="false"
         android:persistent="false"
         android:enabled="false"
         android:summary="@string/prefs_languages_information"
-        android:order="3"/>
+        android:order="4"/>
       <Preference
         android:key="@string/pref_tts_info_link"
         android:selectable="true"
         android:persistent="false"
         android:enabled="true"
         android:summary="@string/prefs_languages_information_off_link"
-        android:order="4"/>
+        android:order="5"/>
     </androidx.preference.PreferenceScreen>
     <ListPreference
       android:key="@string/pref_speed_cameras"
