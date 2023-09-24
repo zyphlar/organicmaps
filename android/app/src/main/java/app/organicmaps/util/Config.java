@@ -156,7 +156,7 @@ public final class Config
   public static boolean getAnnounceStreetNames()
   {
     // Do not announce street names by default (TTS may mangle some languages)
-    return getBool(KEY_TTS_STREET_NAMES, false);
+    return getBool(KEY_TTS_STREET_NAMES, true); //TODO: change in release
   }
 
   public static void setAnnounceStreetNames(boolean enabled)

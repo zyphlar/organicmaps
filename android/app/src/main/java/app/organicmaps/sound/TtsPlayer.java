@@ -254,6 +254,7 @@ public enum TtsPlayer implements Initializable<Context>
   public static void setEnabled(boolean enabled)
   {
     Config.setTtsEnabled(enabled);
+    Config.setAnnounceStreetNames(true); //TODO: change in release
     nativeEnableTurnNotifications(enabled);
   }
 
