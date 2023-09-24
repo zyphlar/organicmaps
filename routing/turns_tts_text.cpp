@@ -135,6 +135,18 @@ std::string GetTtsText::GetTurnNotification(Notification const & notification) c
     //   a lack of a $5 position in the formatter string
     std::string dirVerb = GetTextById(dirKey+"_street_verb");
 
+    if (GetLocale() == "hu") {
+      uint8_t hungarianism = CategorizeHungarianLastWordVowels(streetOut);
+
+      if (hungarianism == 1) {
+        //strings::ReplaceLast(distDirOntoStreetStr, "-re", "-re"); // leave as-is
+      } else if (hungarianism == 2) {
+        strings::ReplaceLast(distDirOntoStreetStr, "-re", "-ra");
+      } else {
+        strings::ReplaceLast(distDirOntoStreetStr, "-re", ""); // clear it
+      }
+    }
+
     char ttsOut[1024];
     snprintf(ttsOut, 1024,
       distDirOntoStreetStr.c_str(),
@@ -157,6 +169,162 @@ std::string GetTtsText::GetTurnNotification(Notification const & notification) c
 
   LOG(LINFO, ("TTS", thenStr + distStr + " " + dirStr));
   return thenStr + distStr + " " + dirStr;
+}
+
+bool GetTtsText::FindInStrArray(std::vector<std::string>& haystack, std::string needle) const
+{
+  auto it = std::find(
+    std::begin(haystack),
+    std::end(haystack),
+    needle
+  );
+
+  return it != std::end(haystack);
+}
+
+uint8_t GetTtsText::CategorizeHungarianAcronymsAndNumbers(std::string const & myString) const
+{
+  std::vector<std::string> backNames = {
+    "A", // a
+    "Á", // á
+    "H", // há
+    "I", // i
+    "Í", // í
+    "K", // ká
+    "O", // o
+    "Ó", // ó
+    "U", // u
+    "Ű", // ú
+    "0", // nulla or zéró
+    "3", // három
+    "6", // hat
+    "8", // nyolc
+    "10", // tíz
+  };
+
+  std::vector<std::string> frontNames = {
+    // all other letters besides H and K
+    "B", "C", "D", "E", "É", "F", "G", "J", "L", "M", "N", "Ö", "Ő", "P", "Q", "R", "S", "T", "Ú", "Ü", "V", "W", "X", "Y", "Z",
+    "1", // egy
+    "2", // kettő
+    "4", // négy
+    "5", // öt
+    "7", // hét
+    "9", // kilenc
+  };
+
+  std::vector<std::string> specialCaseFront = {
+    "40", // negyven front
+    "50", // ötven front
+    "70", // hetven front
+    "90", // kilencven front
+  };
+
+  std::vector<std::string> specialCaseBack = {
+    "10", // tíz back
+    "20", // húsz back
+    "30", // harminc back
+    "60", // hatvan back
+    "80", // nyolcvan back
+  };
+
+  //'100', // száz back
+
+  for (uint8_t i=sizeof(myString)-1;i>0;i--) {
+
+    // special is 2 char, so check last 2
+    std::string twoBuf = "";
+    twoBuf.append(1,myString[i-1]);
+    twoBuf.append(1,myString[i]);
+    if (FindInStrArray(specialCaseFront, twoBuf)) {
+      LOG(LINFO, ("ACR fS",myString,i,twoBuf));
+      return 1;
+    }
+    if (FindInStrArray(specialCaseBack, twoBuf)) {
+      LOG(LINFO, ("ACR bS",myString,i,twoBuf));
+      return 2;
+    }
+    std::string threeBuf = "";
+    threeBuf.append(1,myString[i-2]);
+    threeBuf.append(1,myString[i-1]);
+    threeBuf.append(1,myString[i]);
+    if (threeBuf == "100") {
+      LOG(LINFO, ("ACR bH",myString,i,threeBuf));
+      return 2;
+    }
+
+    std::string oneBuf = "";
+    oneBuf.append(1,myString[i]);
+    if (FindInStrArray(frontNames,oneBuf)) {
+      LOG(LINFO, ("ACR f",myString,i,oneBuf));
+      return 1;
+    }
+    if (FindInStrArray(backNames,oneBuf)) {
+      LOG(LINFO, ("ACR b",myString,i,oneBuf));
+      return 2;
+    }
+    if (myString[i] == ' ') {
+      // if we've somehow hit a space, just say it's back
+      LOG(LERROR, ("Unable to find front/back for",myString));
+      return 2;
+    }
+  }
+}
+
+/*
+ * @return 1 = front = -re, 2 = back = -ra
+ */
+uint8_t GetTtsText::CategorizeHungarianLastWordVowels(std::string const & myString) const
+{
+  std::vector<std::string> front = {"e","é","ö","ő","ü","ű"};
+  std::vector<std::string> back = {"a","á","o","ó","u","ú"};
+  std::vector<std::string> indeterminate = {"i","í"};
+
+  bool allUppercaseNum = true;
+  
+  // scan for acronyms first
+  for (uint8_t i=sizeof(myString)-1;i>0;i--) {
+    if (myString[i] == ' ') {
+      break;
+    }
+    if (myString[i] == std::tolower(myString[i])) {
+      allUppercaseNum = false;
+      break;
+    }
+  }
+  
+  // if the last word is an acronym/number like M5, skip
+  if (allUppercaseNum) {
+    LOG(LINFO, ("Found all uppercase."));
+    return CategorizeHungarianAcronymsAndNumbers(myString);
+  }
+
+  bool foundIndeterminate = false;
+
+  // find last vowel in last word, since it discriminates in all cases
+  for (uint8_t i=sizeof(myString)-1;i>0;i--) {
+    std::string lowerC = "";
+    lowerC.append(1,std::tolower(myString[i]));
+    if (FindInStrArray(front,lowerC)) {
+      return 1;
+    }
+    if (FindInStrArray(back,lowerC)) {
+      return 2;
+    }
+    if (FindInStrArray(indeterminate,lowerC)) {
+      foundIndeterminate = true;
+    }
+    if (myString[i] == ' ' && foundIndeterminate == true) {
+      // if we've hit a space with only indeterminates, it's back
+      return 2;
+    }
+    if (myString[i] == ' ' && foundIndeterminate == false) {
+      // if we've hit a space with no vowels at all, check for numbers
+      // and acronyms
+      return CategorizeHungarianAcronymsAndNumbers(myString);
+    }
+  }
+  return 2; // default
 }
 
 std::string GetTtsText::GetSpeedCameraNotification() const
