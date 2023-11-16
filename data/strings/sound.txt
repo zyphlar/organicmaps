@@ -502,7 +502,7 @@
     nb = Omdirigering.
     nl = Omleiding.
     pl = Przekierowanie.
-    pt = Reencaminhamento.
+    pt = Recalculando rota.
     ro = Redirecționare.
     ru = Изменение маршрута.
     sk = Presmerovanie.
