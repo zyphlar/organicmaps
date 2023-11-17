@@ -7,6 +7,8 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.location.Location;
 import android.net.Uri;
 import android.os.Build;
@@ -29,6 +31,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StyleRes;
 import androidx.annotation.UiThread;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.app.ActivityCompat;
 import androidx.core.view.ViewCompat;
@@ -94,6 +97,7 @@ import app.organicmaps.settings.RoadType;
 import app.organicmaps.settings.SettingsActivity;
 import app.organicmaps.settings.UnitLocale;
 import app.organicmaps.util.Config;
+import app.organicmaps.util.Graphics;
 import app.organicmaps.util.LocationUtils;
 import app.organicmaps.util.SharingUtils;
 import app.organicmaps.util.ThemeSwitcher;
@@ -120,7 +124,6 @@ import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static app.organicmaps.location.LocationState.FOLLOW;
 import static app.organicmaps.location.LocationState.FOLLOW_AND_ROTATE;
 import static app.organicmaps.location.LocationState.LOCATION_TAG;
-import static app.organicmaps.location.LocationState.PENDING_POSITION;
 
 public class MwmActivity extends BaseMwmFragmentActivity
     implements PlacePageActivationListener,
@@ -166,15 +169,6 @@ public class MwmActivity extends BaseMwmFragmentActivity
 
   private View mPointChooser;
   private Toolbar mPointChooserToolbar;
-
-  enum PointChooserMode
-  {
-    NONE,
-    EDITOR,
-    API
-  }
-  @NonNull
-  private PointChooserMode mPointChooserMode = PointChooserMode.NONE;
 
   private RoutingPlanInplaceController mRoutingPlanInplaceController;
 
@@ -486,7 +480,7 @@ public class MwmActivity extends BaseMwmFragmentActivity
     UiUtils.setLightStatusBar(this, !(
         ThemeUtils.isNightTheme(this)
         || RoutingController.get().isPlanning()
-        || Framework.nativeIsInChoosePositionMode()
+        || Framework.nativeGetChoosePositionMode() != Framework.ChoosePositionMode.NONE
     ));
   }
 
@@ -545,15 +539,13 @@ public class MwmActivity extends BaseMwmFragmentActivity
     UiUtils.showHomeUpButton(mPointChooserToolbar);
     mPointChooserToolbar.setNavigationOnClickListener(v -> {
       closePositionChooser();
-      if (mPointChooserMode == PointChooserMode.API)
-        finish();
     });
     mPointChooser.findViewById(R.id.done).setOnClickListener(
         v ->
         {
-          switch (mPointChooserMode)
+          switch (Framework.nativeGetChoosePositionMode())
           {
-          case API:
+          case Framework.ChoosePositionMode.API:
             final Intent apiResult = new Intent();
             final double[] center = Framework.nativeGetScreenRectCenter();
             apiResult.putExtra(Const.EXTRA_POINT_LAT, center[0]);
@@ -562,7 +554,7 @@ public class MwmActivity extends BaseMwmFragmentActivity
             setResult(Activity.RESULT_OK, apiResult);
             finish();
             break;
-          case EDITOR:
+          case Framework.ChoosePositionMode.EDITOR:
             if (Framework.nativeIsDownloadedMapAtScreenCenter())
               startActivity(new Intent(MwmActivity.this, FeatureCategoryActivity.class));
             else
@@ -575,8 +567,8 @@ public class MwmActivity extends BaseMwmFragmentActivity
                     .show();
             }
             break;
-          case NONE:
-            throw new IllegalStateException("Unexpected mPositionChooserMode");
+          case Framework.ChoosePositionMode.NONE:
+            throw new IllegalStateException("Unexpected Framework.nativeGetChoosePositionMode()");
           }
           closePositionChooser();
         });
@@ -611,7 +603,7 @@ public class MwmActivity extends BaseMwmFragmentActivity
 
   public void showPositionChooserForAPI(String appName)
   {
-    showPositionChooser(PointChooserMode.API, false, false);
+    showPositionChooser(Framework.ChoosePositionMode.API, false, false);
     if (!TextUtils.isEmpty(appName))
     {
       setTitle(appName);
@@ -621,28 +613,27 @@ public class MwmActivity extends BaseMwmFragmentActivity
 
   public void showPositionChooserForEditor(boolean isBusiness, boolean applyPosition)
   {
-    showPositionChooser(PointChooserMode.EDITOR, isBusiness, applyPosition);
+    showPositionChooser(Framework.ChoosePositionMode.EDITOR, isBusiness, applyPosition);
   }
 
-  private void showPositionChooser(PointChooserMode mode, boolean isBusiness, boolean applyPosition)
+  private void showPositionChooser(@Framework.ChoosePositionMode int mode, boolean isBusiness, boolean applyPosition)
   {
-    mPointChooserMode = mode;
     closeFloatingToolbarsAndPanels(false);
     UiUtils.show(mPointChooser);
     mMapButtonsViewModel.setButtonsHidden(true);
-    Framework.nativeTurnOnChoosePositionMode(isBusiness, applyPosition);
+    Framework.nativeSetChoosePositionMode(mode, isBusiness, applyPosition);
     refreshLightStatusBar();
   }
 
   private void hidePositionChooser()
   {
     UiUtils.hide(mPointChooser);
-    Framework.nativeTurnOffChoosePositionMode();
+    @Framework.ChoosePositionMode int mode = Framework.nativeGetChoosePositionMode();
+    Framework.nativeSetChoosePositionMode(Framework.ChoosePositionMode.NONE, false, false);
     mMapButtonsViewModel.setButtonsHidden(false);
-    if (mPointChooserMode == PointChooserMode.API)
-      finish();
-    mPointChooserMode = PointChooserMode.NONE;
     refreshLightStatusBar();
+    if (mode == Framework.ChoosePositionMode.API)
+      finish();
   }
 
   private void initMap(boolean isLaunchByDeepLink)
@@ -1037,15 +1028,10 @@ public class MwmActivity extends BaseMwmFragmentActivity
     super.onResume();
     refreshSearchToolbar();
     setFullscreen(isFullscreen());
-    if (Framework.nativeIsInChoosePositionMode())
+    if (Framework.nativeGetChoosePositionMode() != Framework.ChoosePositionMode.NONE)
     {
       UiUtils.show(mPointChooser);
       mMapButtonsViewModel.setButtonsHidden(true);
-      if (mPointChooserMode == PointChooserMode.NONE)
-      {
-        // BUG: https://github.com/organicmaps/organicmaps/issues/3945
-        throw new IllegalStateException("Unexpected mPositionChooserMode == NONE in ChoosePositionMode");
-      }
     }
     if (mOnmapDownloader != null)
       mOnmapDownloader.onResume();
@@ -1242,7 +1228,8 @@ public class MwmActivity extends BaseMwmFragmentActivity
   private boolean isFullscreen()
   {
     // Buttons are hidden in position chooser mode but we are not in fullscreen
-    return Boolean.TRUE.equals(mMapButtonsViewModel.getButtonsHidden().getValue()) && !Framework.nativeIsInChoosePositionMode();
+    return Boolean.TRUE.equals(mMapButtonsViewModel.getButtonsHidden().getValue()) &&
+        Framework.nativeGetChoosePositionMode() == Framework.ChoosePositionMode.NONE;
   }
 
   @Override
@@ -1661,6 +1648,28 @@ public class MwmActivity extends BaseMwmFragmentActivity
         .show();
 
     return false;
+  }
+
+  public void openKayakLink(@NonNull String url)
+  {
+    if (Config.isKayakDisclaimerAccepted())
+    {
+      Utils.openUrl(this, url);
+      return;
+    }
+
+    dismissAlertDialog();
+    mAlertDialog = new MaterialAlertDialogBuilder(this, R.style.MwmTheme_AlertDialog)
+        .setTitle(R.string.how_to_support_us)
+        .setMessage(R.string.dialog_kayak_disclaimer)
+        .setCancelable(false)
+        .setPositiveButton(R.string.more_on_kayak, (dlg, which) -> {
+          Config.acceptKayakDisclaimer();
+          Utils.openUrl(this, url);
+        })
+        .setNegativeButton(R.string.cancel, null)
+        .setOnDismissListener(dialog -> mAlertDialog = null)
+        .show();
   }
 
   private boolean showStartPointNotice()
