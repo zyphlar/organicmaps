@@ -5,6 +5,7 @@
 
 import os
 import subprocess
+import logging
 import platform
 import requests
 import shutil
@@ -28,6 +29,35 @@ GOOGLE_TARGET_LANGUAGES = [
   'th',
   'vi',
   'zh-TW',  # zh-Hant in OM
+  'af', # Below added by WB
+  'bg',
+  'cs' ,
+  'da' ,
+  'de',
+  'el',
+  'es',
+  'et',
+  'fi',
+  'fr',
+  'hr',
+  'hu',
+  'id',
+  'it',
+  'ja',
+  'ko',
+  'lt',
+  'nb',
+  'nl',
+  'pl',
+  'pt',
+  'pt-BR',
+  'ro',
+  'ru',
+  'sk',
+  'sv',
+  'tr',
+  'uk',
+  'zh', # zh-Hans in OM
 ]
 
 # See https://www.deepl.com/docs-api/translate-text/translate-text/ for target languages.
@@ -88,12 +118,14 @@ def google_translate(text, source_language):
     exit(1)
 
   print('\nGoogle translations:')
-  translations = {}
+  translations = {source_language: text}
   i = 0
   for line in res.stdout.splitlines():
     lang = GOOGLE_TARGET_LANGUAGES[i]
     if lang == 'zh-TW':
       lang = 'zh-Hant'
+    elif lang == 'zh':
+      lang = 'zh-Hans'
     translations[lang] = line.capitalize()
     i = i + 1
     print(lang + ' = ' + line)
@@ -102,14 +134,31 @@ def google_translate(text, source_language):
 def deepl_translate_one(text, source_language, target_language):
   url = 'https://api-free.deepl.com/v2/translate'
   payload = {
-      'auth_key': get_api_key(),
       'text': text,
       'source_lang': source_language.lower(),
       'target_lang': target_language,
       'formality': 'prefer_less',
   }
-  headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-  response = requests.request('POST', url, headers=headers, data=payload)
+  headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'DeepL-Auth-Key '+get_api_key(),
+  }
+  print(headers)
+
+  try: # for Python 3
+      from http.client import HTTPConnection
+  except ImportError:
+      from httplib import HTTPConnection
+  HTTPConnection.debuglevel = 1
+  
+  logging.basicConfig() # you need to initialize logging, otherwise you will not see anything from requests
+  logging.getLogger().setLevel(logging.DEBUG)
+  requests_log = logging.getLogger("urllib3")
+  requests_log.setLevel(logging.DEBUG)
+  requests_log.propagate = True
+
+  response = requests.request('POST', url, headers=headers, json=payload)
+  print(response)
   json = response.json()
   return json['translations'][0]['text']
 
@@ -158,17 +207,21 @@ if __name__ == '__main__':
     source_language = text_to_translate[0:2]
     text_to_translate = text_to_translate[3:].lstrip()
 
-  translations = deepl_translate(text_to_translate, source_language)
-  google_translations = google_translate(text_to_translate, source_language)
-  translations.update(google_translations)
+  #translations = deepl_translate(text_to_translate, source_language)
+  translations = google_translate(text_to_translate, source_language)
+  #translations.update(google_translations)
   # Remove duplicates for regional variations.
   for regional in ['en-GB', 'es-MX', 'pt-BR']:
     main = regional.split('-')[0]  # 'en', 'es', 'pt'...
-    if translations[regional] == translations[main]:
+    if translations.get(regional, 1) == translations.get(main, 0):
       translations.pop(regional)
 
+  if not translations.get('en',False):
+    print("English wasn't in the translations list despite being the source, that's weird. Debug.")
+    exit(1)
+
   print('\nMerged Deepl and Google translations:')
-  en = translations.pop('en').title()  # Historically, English is always in Title Case
+  en = translations.pop('en')
   langs = list(translations.keys())
   langs.sort()
 
